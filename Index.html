@@ -67,6 +67,20 @@ a{color:var(--cyan)}
 .iobtn .ic{width:16px;height:16px}
 .savetag{font-family:"Space Mono";font-size:10.5px;color:rgba(255,255,255,.85);text-align:right;margin-top:6px}
 .savetag.dirty{color:#fff;font-weight:700}
+.linkbtn{background:none;border:0;color:rgba(255,255,255,.92);font-size:11px;text-decoration:underline;font-family:"Space Mono";cursor:pointer;text-align:right;margin-top:3px}
+.linkbtn:hover{color:#fff}
+.authgate{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;padding:24px;background:radial-gradient(900px 500px at 82% -10%,rgba(54,179,74,.18),transparent 55%),radial-gradient(800px 500px at -6% 110%,rgba(30,136,214,.16),transparent 55%),var(--bg)}
+.authgate.on{display:flex}
+.authcard{width:100%;max-width:380px;background:var(--bg2);border:1px solid var(--line2);border-radius:20px;padding:26px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:13px}
+.authbrand{display:flex;align-items:center;gap:13px;margin-bottom:4px}
+.authbrand .alogo{width:50px;height:50px;border-radius:14px;flex:none;background-color:rgba(255,255,255,.96);background-image:var(--mark);background-size:74%;background-position:center;background-repeat:no-repeat}
+.authbrand h1{font-family:"Space Grotesk";font-weight:700;font-size:18px;margin:0}
+.authbrand p{margin:1px 0 0;font-size:11px;color:var(--muted);font-family:"Space Mono";letter-spacing:1px;text-transform:uppercase}
+.authmsg{display:none;font-size:13px;padding:10px 12px;border-radius:10px;line-height:1.4}
+.authmsg.on{display:block}
+.authmsg.err{background:rgba(218,90,60,.16);color:#f1a08e;border:1px solid rgba(218,90,60,.35)}
+.authmsg.ok{background:rgba(54,179,74,.16);color:#8fe0a3;border:1px solid rgba(54,179,74,.35)}
+.authnote{font-size:12px;color:var(--muted);text-align:center;margin:6px 0 0;line-height:1.5}
 
 /* ---------- NAV (tabs) ---------- */
 .navbar{position:sticky;top:0;z-index:30;background:rgba(10,15,34,.86);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
@@ -371,6 +385,7 @@ input[type=file]{display:none}
 </head>
 <body>
 <!-- HEADER -->
+<div id="appRoot" style="display:none">
 <header class="topband">
   <div class="bandinner">
     <div class="brand">
@@ -384,10 +399,12 @@ input[type=file]{display:none}
       <div class="d1" id="bandWeekday">—</div>
       <div class="d2" id="bandDate">—</div>
       <div class="bandio">
-        <button class="iobtn" id="saveBtn" data-ic="down"><span>Salvar .json</span></button>
-        <button class="iobtn" id="loadBtn" data-ic="up"><span>Carregar</span></button>
+        <button class="iobtn" id="saveBtn" data-ic="down"><span>Backup .json</span></button>
+        <button class="iobtn" id="loadBtn" data-ic="up"><span>Importar</span></button>
       </div>
-      <div class="savetag" id="saveState">tudo salvo</div>
+      <div class="savetag" id="saveState">salvo na nuvem ✓</div>
+      <div class="savetag" id="userBar" style="opacity:.8"></div>
+      <button class="linkbtn" id="logoutBtn">Sair da conta</button>
     </div>
   </div>
 </header>
@@ -411,13 +428,37 @@ input[type=file]{display:none}
   <div class="ev"><span class="evmark"></span>Desenvolvido por <b>EVARE</b> — <i>Evoluir, Agindo e Refletindo</i></div>
   <div class="ev" style="color:var(--muted)">Planner Bruno Figueiredo · método RPM</div>
 </div></footer>
+</div><!-- /appRoot -->
 
 <input type="file" id="fileInput" accept="application/json,.json">
 <div class="scrim" id="scrim"><div class="modal" id="modal"></div></div>
 <div class="charttip" id="chartTip"></div>
 <div class="toast" id="toast"></div>
 
+<!-- TELA DE LOGIN -->
+<div class="authgate" id="authGate">
+  <div class="authcard">
+    <div class="authbrand"><div class="alogo"></div><div><h1>Planner Bruno Figueiredo</h1><p>EVARE · método RPM</p></div></div>
+    <div id="authMsg" class="authmsg"></div>
+    <div class="field"><label>E-mail</label><input id="au-email" type="text" autocomplete="username" placeholder="voce@email.com"></div>
+    <div class="field"><label>Senha</label><input id="au-pass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
+    <button class="btn cta" id="au-login" style="width:100%;justify-content:center;margin-top:2px">Entrar</button>
+    <button class="btn ghost" id="au-signup" style="width:100%;justify-content:center">Criar conta</button>
+    <p class="authnote">Seus dados ficam na sua conta, sincronizados na nuvem entre seus aparelhos.</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+/* ==================================================================
+   >>> CONFIGURE A NUVEM AQUI <<<   (estas sao as 2 unicas linhas que voce edita)
+   Dica: aperte Ctrl+F (Cmd+F no Mac) e procure por  COLE_SUA_URL_AQUI
+   Troque o texto entre aspas pelas suas chaves do Supabase e salve.
+   ================================================================== */
+const SUPABASE_URL = "https://lwgqniqafuzrcmsnnjfk.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_3m9-yrAL9IOi1_pUJyCvUw_ZdJndZpC";
+/* ================================================================== */
+
 /* ============ ICONS ============ */
 function ic(n){
   const p={
@@ -496,26 +537,64 @@ function seed(){
 }
 
 /* ============ PERSISTENCE (arquivo local) ============ */
-function markDirty(){dirty=true;updateSaveState()}
-function updateSaveState(){const el=document.getElementById('saveState');el.textContent=dirty?'alterações não salvas':'tudo salvo';el.classList.toggle('dirty',dirty);}
+const LS_KEY='planner-bruno-rpm';
+let sb=null,currentUser=null,saveTimer=null;
+const cloudReady=SUPABASE_URL.startsWith("http")&&SUPABASE_ANON_KEY.length>20;
+if(cloudReady){sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);}
+
+function markDirty(){dirty=true;cacheLocal();scheduleSave();updateSaveState();}
+function cacheLocal(){try{localStorage.setItem(LS_KEY,JSON.stringify(state));}catch(e){}}
+function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(cloudSave,800);}
+async function cloudSave(){
+  if(!cloudReady||!currentUser)return;
+  try{const {error}=await sb.from('rpm_state').upsert({user_id:currentUser.id,data:state,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+    if(error)throw error; dirty=false; updateSaveState();
+  }catch(e){const el=document.getElementById('saveState');if(el){el.className='savetag dirty';el.textContent='erro de sincronização';}}
+}
+async function cloudLoad(){
+  const {data,error}=await sb.from('rpm_state').select('data').eq('user_id',currentUser.id).maybeSingle();
+  if(error)throw error;
+  if(data&&data.data){state=data.data;state.journal=state.journal||[];state.reviews=state.reviews||[];}
+  else{state=loadSaved()||seed();await cloudSave();}
+}
+function updateSaveState(){const el=document.getElementById('saveState');if(!el)return;
+  if(!cloudReady){el.className='savetag dirty';el.textContent='configure a nuvem';return;}
+  el.className='savetag'+(dirty?' dirty':'');
+  el.textContent=dirty?'sincronizando…':'salvo na nuvem ✓';}
+function loadSaved(){try{const s=localStorage.getItem(LS_KEY);if(s){const d=JSON.parse(s);if(d.categories&&d.blocks){d.journal=d.journal||[];d.reviews=d.reviews||[];return d;}}}catch(e){}return null;}
 function exportJSON(){
   state.exportedAt=new Date().toISOString();
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
   a.href=url;a.download=`planner-bruno-${todayISO()}.json`;a.click();URL.revokeObjectURL(url);
-  dirty=false;updateSaveState();toast('Backup baixado — guarde este arquivo');
+  toast('Backup baixado');
 }
 function importJSON(file){
   const r=new FileReader();
-  r.onload=()=>{try{
-    const data=JSON.parse(r.result);
-    if(!data.categories||!data.blocks)throw 0;
+  r.onload=()=>{try{const data=JSON.parse(r.result);if(!data.categories||!data.blocks)throw 0;
     data.journal=data.journal||[];data.reviews=data.reviews||[];
-    state=data;dirty=false;updateSaveState();render();toast('Dados carregados com sucesso');
+    state=data;markDirty();render();toast('Importado e sincronizado na nuvem');
   }catch(e){toast('Arquivo inválido — verifique se é um .json do planner')}};
   r.onerror=()=>toast('Não consegui ler o arquivo');
   r.readAsText(file);
 }
+
+/* ===== AUTENTICAÇÃO (Supabase) ===== */
+function authMsg(t,c){const el=document.getElementById('authMsg');el.textContent=t;el.className='authmsg on '+(c||'');}
+function authVal(id){return document.getElementById(id).value.trim();}
+function showGate(){document.getElementById('authGate').classList.add('on');document.getElementById('appRoot').style.display='none';}
+async function startApp(user){currentUser=user;document.getElementById('authGate').classList.remove('on');document.getElementById('appRoot').style.display='';
+  try{await cloudLoad();}catch(e){state=loadSaved()||seed();toast('Sem conexão com a nuvem — usando cópia local');}
+  const ub=document.getElementById('userBar');if(ub)ub.textContent=user.email;
+  dirty=false;updateSaveState();render();}
+async function doLogin(){const email=authVal('au-email'),pass=document.getElementById('au-pass').value;if(!email||!pass)return authMsg('Preencha e-mail e senha','err');authMsg('Entrando…');
+  const {data,error}=await sb.auth.signInWithPassword({email,password:pass});
+  if(error)return authMsg(error.message.includes('Invalid')?'E-mail ou senha incorretos':error.message,'err');startApp(data.user);}
+async function doSignup(){const email=authVal('au-email'),pass=document.getElementById('au-pass').value;if(!email||pass.length<6)return authMsg('A senha precisa de ao menos 6 caracteres','err');authMsg('Criando conta…');
+  const {data,error}=await sb.auth.signUp({email,password:pass});
+  if(error)return authMsg(error.message,'err');
+  if(data.session)startApp(data.user);else authMsg('Conta criada! Confirme pelo link no seu e-mail e depois clique em Entrar.','ok');}
+async function doLogout(){if(dirty)await cloudSave();await sb.auth.signOut();currentUser=null;document.getElementById('au-pass').value='';showGate();}
 
 /* ============ MODAL / TOAST ============ */
 const scrim=document.getElementById('scrim'),modalEl=document.getElementById('modal');
@@ -988,7 +1067,15 @@ window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.return
 document.querySelectorAll('[data-ic]').forEach(b=>b.insertAdjacentHTML('afterbegin',ic(b.dataset.ic)));
 document.getElementById('bandWeekday').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long'});
 document.getElementById('bandDate').textContent=new Date().toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'});
-render();
+document.getElementById('au-login').onclick=doLogin;
+document.getElementById('au-signup').onclick=doSignup;
+document.getElementById('logoutBtn').onclick=doLogout;
+document.getElementById('au-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+(async function(){
+  if(!cloudReady){showGate();authMsg('Configure SUPABASE_URL e SUPABASE_ANON_KEY no topo do script para ativar o login.','err');document.getElementById('au-login').disabled=true;document.getElementById('au-signup').disabled=true;return;}
+  const {data}=await sb.auth.getSession();
+  if(data.session)startApp(data.session.user);else showGate();
+})();
 </script>
 </body>
 </html>
